@@ -14,7 +14,7 @@ app.use(express.json());
 
 // Mongodb start here
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const uri = process.env.MONGODB_URI;
 
@@ -43,6 +43,20 @@ async function run() {
             console.log(result);
             res.send(result);
         })
+
+        app.get('/doclist/:id', async (req, res) => {
+            const { id } = req.params;
+            const result = await doctorsCollection.findOne({ _id: new ObjectId(id) })
+            res.json(result);
+        })
+
+        app.get('/toprated', async (req, res) => {
+            const cursor = doctorsCollection.find().limit(3)
+            const result = await cursor.toArray()
+            res.send(result);
+        })
+
+
 
         // Send a ping to confirm a successful connection
         // await client.db("admin").command({ ping: 1 });

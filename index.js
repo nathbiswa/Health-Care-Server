@@ -35,7 +35,8 @@ async function run() {
         await client.connect();
         // Create Database
         const db = client.db('healthcare')
-        const doctorsCollection = db.collection('doclist')
+        const doctorsCollection = db.collection('doclist');
+        const BookingCollection = db.collection('booking');
 
         // Find all doctor list
         app.get('/doclist', async (req, res) => {
@@ -43,6 +44,51 @@ async function run() {
             console.log(result);
             res.send(result);
         })
+
+        // All booking data mongodb save
+        // All booking data Post method start
+
+        app.post("/booking", async (req, res) => {
+            try {
+                const booking = req.body;
+
+                if (!booking.email) {
+                    return res.status(400).send({ success: false, message: "Email required" });
+                }
+
+                const result = await BookingCollection.insertOne(booking);
+
+                res.send({
+                    success: true,
+                    insertedId: result.insertedId,
+                });
+
+            } catch (error) {
+                res.status(500).send({ success: false, error: error.message });
+            }
+        });
+
+        // Booking data get here start
+        app.get("/booking", async (req, res) => {
+            try {
+                const email = req.query.email;
+
+                if (!email) {
+                    return res.status(400).send({ message: "Email required" });
+                }
+
+                const bookings = await BookingCollection
+                    .find({ email })
+                    .toArray();
+
+                res.send(bookings);
+
+            } catch (error) {
+                res.status(500).send({ message: error.message });
+            }
+        });
+
+
 
         // Search all doctor list
         app.get('/search', async (req, res) => {

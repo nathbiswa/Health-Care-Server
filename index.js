@@ -44,6 +44,40 @@ async function run() {
             res.send(result);
         })
 
+        // Search all doctor list
+        app.get('/search', async (req, res) => {
+            try {
+                const searchText = req.query.q;
+
+                if (!searchText || !searchText.trim()) {
+                    return res.send([]);
+                }
+
+                const escapeRegex = (text) => {
+                    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                };
+
+                const safeText = escapeRegex(searchText);
+
+                const result = await doctorsCollection.find({
+                    $or: [
+                        { name: { $regex: safeText, $options: "i" } },
+                        { specialty: { $regex: safeText, $options: "i" } },
+                        { hospital: { $regex: safeText, $options: "i" } },
+                        { location: { $regex: safeText, $options: "i" } }
+                    ]
+                }).toArray();
+
+                res.send(result);
+
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: "Server error" });
+            }
+        });
+
+
+
         app.get('/doclist/:id', async (req, res) => {
             const { id } = req.params;
             const result = await doctorsCollection.findOne({ _id: new ObjectId(id) })

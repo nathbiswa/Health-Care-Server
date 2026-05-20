@@ -1,8 +1,12 @@
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 const express = require('express');
 const app = express();
 const cors = require('cors');
 const dotenv = require('dotenv');
 dotenv.config();
+
+// adapterFn is not a function
 
 const PORT = process.env.PORT || 8000;
 
@@ -11,6 +15,8 @@ app.use(express.json());
 
 // MongoDB
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
+
 
 const uri = process.env.MONGODB_URI;
 
@@ -23,9 +29,38 @@ const client = new MongoClient(uri, {
     }
 });
 
+// =======JWKS Setup========
+const JWKS = createRemoteJWKSet(
+    new URL('http://localhost:3000/api/auth/jwks')
+);
+
+// verifyToken start
+const veriryToken = async (req, res, next) => {
+    const authHeader = req?.headers.authorization
+    console.log(authHeader);
+    if (!authHeader) {
+        return res.status(401).json({ message: "Unauthrization" })
+    }
+    const token = authHeader.split(' ')[1]
+
+    if (!token) {
+        return res.status(401).json({ message: "Unauthorization" })
+    }
+
+    try {
+        const { payload } = await jwtVerify(token, JWKS)
+        console.log(payload)
+        next()
+    } catch (error) {
+        return res.status(401).json({ message: "Unauthorizatiion" })
+    }
+}
+
+
+
 async function run() {
     try {
-        await client.connect();
+        // await client.connect();
 
         // ================= DATABASE =================
         const db = client.db('healthcare');
@@ -41,7 +76,7 @@ async function run() {
         });
 
         // ================= SINGLE DOCTOR =================
-        app.get('/doclist/:id', async (req, res) => {
+        app.get('/doclist/:id', veriryToken, async (req, res) => {
             const id = req.params.id;
             const result = await doctorsCollection.findOne({
                 _id: new ObjectId(id)

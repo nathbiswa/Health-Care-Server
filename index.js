@@ -136,7 +136,7 @@ async function run() {
                 });
             }
         });
-
+        // ================= DELETE BOOKING =================
         app.delete("/booking/:id", async (req, res) => {
             try {
                 const id = req.params.id;

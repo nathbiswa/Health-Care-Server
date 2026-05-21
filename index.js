@@ -1,26 +1,27 @@
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
+
 const express = require('express');
 const app = express();
 const cors = require('cors');
-const dotenv = require('dotenv');
-dotenv.config();
-
-// adapterFn is not a function
+require('dotenv').config();
 
 const PORT = process.env.PORT || 8000;
 
 app.use(cors());
 app.use(express.json());
 
-// MongoDB
+// ================= MONGODB =================
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 
+// ================= JOSE-CJS FIX =================
+const jose = require("jose-cjs");
+const createRemoteJWKSet = jose.createRemoteJWKSet;
+const jwtVerify = jose.jwtVerify;
 
+// ================= CLIENT =================
 const uri = process.env.MONGODB_URI;
 
-// Client
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -29,54 +30,59 @@ const client = new MongoClient(uri, {
     }
 });
 
-// =======JWKS Setup========
-const JWKS = createRemoteJWKSet(
-    new URL('http://localhost:3000/api/auth/jwks')
-);
+// ================= JWKS =================
+let JWKS;
+try {
+    JWKS = createRemoteJWKSet(
+        new URL('http://localhost:3000/api/auth/jwks')
+    );
+} catch (err) {
+    console.log("JWKS init failed");
+}
 
-// verifyToken start
-const veriryToken = async (req, res, next) => {
-    const authHeader = req?.headers.authorization
-    console.log(authHeader);
+// ================= VERIFY TOKEN =================
+const verifyToken = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+
     if (!authHeader) {
-        return res.status(401).json({ message: "Unauthrization" })
+        return res.status(401).json({ message: "Unauthorized" });
     }
-    const token = authHeader.split(' ')[1]
+
+    const token = authHeader.split(" ")[1];
 
     if (!token) {
-        return res.status(401).json({ message: "Unauthorization" })
+        return res.status(401).json({ message: "Unauthorized" });
     }
 
     try {
-        const { payload } = await jwtVerify(token, JWKS)
-        console.log(payload)
-        next()
+        const { payload } = await jwtVerify(token, JWKS);
+        req.user = payload;
+        next();
     } catch (error) {
-        return res.status(401).json({ message: "Unauthorizatiion" })
+        console.log("JWT ERROR:", error.message);
+        return res.status(401).json({ message: "Invalid token" });
     }
-}
+};
 
-
-
+// ================= RUN =================
 async function run() {
     try {
         // await client.connect();
+        // console.log("MongoDB connected successfully!");
 
-        // ================= DATABASE =================
         const db = client.db('healthcare');
 
         const doctorsCollection = db.collection('doclist');
         const bookingCollection = db.collection('booking');
         const usersCollection = db.collection('users');
 
-        // ================= DOCTOR LIST =================
+        // ================= DOCTORS =================
         app.get('/doclist', async (req, res) => {
             const result = await doctorsCollection.find().toArray();
             res.send(result);
         });
 
-        // ================= SINGLE DOCTOR =================
-        app.get('/doclist/:id', veriryToken, async (req, res) => {
+        app.get('/doclist/:id', verifyToken, async (req, res) => {
             const id = req.params.id;
             const result = await doctorsCollection.findOne({
                 _id: new ObjectId(id)
@@ -84,167 +90,115 @@ async function run() {
             res.send(result);
         });
 
-        // ================= TOP RATED =================
-        app.get('/toprated', async (req, res) => {
-            const result = await doctorsCollection.find().limit(3).toArray();
-            res.send(result);
-        });
-
-        // ================= SEARCH DOCTOR =================
+        // ================= SEARCH =================
         app.get('/search', async (req, res) => {
-            const searchText = req.query.q;
+            const q = req.query.q;
 
-            if (!searchText) return res.send([]);
+            if (!q) return res.send([]);
 
-            const safeText = searchText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
             const result = await doctorsCollection.find({
                 $or: [
-                    { name: { $regex: safeText, $options: "i" } },
-                    { specialty: { $regex: safeText, $options: "i" } },
-                    { hospital: { $regex: safeText, $options: "i" } },
-                    { location: { $regex: safeText, $options: "i" } }
+                    { name: { $regex: safe, $options: "i" } },
+                    { specialty: { $regex: safe, $options: "i" } },
+                    { hospital: { $regex: safe, $options: "i" } },
                 ]
             }).toArray();
 
             res.send(result);
         });
 
-        // ================= BOOKING CREATE =================
+        // ================= CREATE BOOKING =================
         app.post("/booking", async (req, res) => {
-            try {
-                const booking = req.body;
+            const booking = req.body;
 
-                if (!booking.email) {
-                    return res.status(400).send({
-                        success: false,
-                        message: "Email required"
-                    });
-                }
-
-                const result = await bookingCollection.insertOne(booking);
-
-                res.send({
-                    success: true,
-                    insertedId: result.insertedId,
-                });
-
-            } catch (error) {
-                res.status(500).send({
-                    success: false,
-                    error: error.message
-                });
+            if (!booking.email) {
+                return res.status(400).send({ message: "Email required" });
             }
-        });
-        // ================= DELETE BOOKING =================
-        app.delete("/booking/:id", async (req, res) => {
-            try {
-                const id = req.params.id;
-                const result = await bookingCollection.deleteOne({ _id: new ObjectId(id) });
 
-                res.send({
-                    success: true,
-                    deletedCount: result.deletedCount,
-                });
+            const result = await bookingCollection.insertOne(booking);
 
-            } catch (error) {
-                res.status(500).send({
-                    success: false,
-                    error: error.message
-                });
-            }
+            res.send({
+                success: true,
+                insertedId: result.insertedId,
+            });
         });
 
         // ================= GET BOOKING =================
         app.get("/booking", async (req, res) => {
-            try {
-                const email = req.query.email;
+            const email = req.query.email;
 
-                if (!email) {
-                    return res.status(400).send({
-                        success: false,
-                        message: "Email required"
-                    });
-                }
-
-                const bookings = await bookingCollection
-                    .find({ email })
-                    .toArray();
-
-                res.send(bookings);
-
-            } catch (error) {
-                res.status(500).send({
-                    success: false,
-                    message: error.message
-                });
+            if (!email) {
+                return res.status(400).send({ message: "Email required" });
             }
+
+            const result = await bookingCollection.find({ email }).toArray();
+            res.send(result);
+        });
+
+        // ================= DELETE BOOKING =================
+        app.delete("/booking/:id", async (req, res) => {
+            const id = req.params.id;
+
+            const result = await bookingCollection.deleteOne({
+                _id: new ObjectId(id)
+            });
+
+            res.send({
+                success: true,
+                deletedCount: result.deletedCount
+            });
         });
 
         // ================= UPDATE BOOKING =================
         app.put("/booking/:id", async (req, res) => {
-            try {
-                const id = req.params.id;
-                const data = req.body;
+            const id = req.params.id;
+            const { date, time, message } = req.body;
 
-                const result = await bookingCollection.updateOne(
-                    { _id: new ObjectId(id) },
-                    {
-                        $set: {
-                            date: data.date,
-                            time: data.time,
-                            message: data.message,
-                        },
+            const result = await bookingCollection.updateOne(
+                { _id: new ObjectId(id) },
+                {
+                    $set: {
+                        date,
+                        time,
+                        message,
                     }
-                );
+                }
+            );
 
-                res.send(result);
-
-            } catch (error) {
-                res.status(500).send({
-                    error: error.message
-                });
-            }
+            res.send({
+                success: true,
+                modifiedCount: result.modifiedCount
+            });
         });
 
         // ================= UPDATE PROFILE =================
         app.put("/users/:email", async (req, res) => {
-            try {
-                const email = req.params.email;
-                const data = req.body;
+            const email = req.params.email;
+            const { name, image } = req.body;
 
-                const result = await usersCollection.updateOne(
-                    { email },
-                    {
-                        $set: {
-                            name: data.name,
-                            image: data.image,
-                        },
-                    },
-                    { upsert: true }
-                );
+            const result = await usersCollection.updateOne(
+                { email },
+                {
+                    $set: { name, image }
+                },
+                { upsert: true }
+            );
 
-                res.send(result);
-
-            } catch (error) {
-                res.status(500).send({
-                    error: error.message
-                });
-            }
+            res.send(result);
         });
 
-        console.log("MongoDB connected successfully");
-
-    } finally {
-        // keep alive
+    } catch (error) {
+        console.error("SERVER ERROR:", error);
     }
 }
 
-run().catch(console.dir);
+run();
 
 // ================= ROOT =================
 app.get('/', (req, res) => {
-    res.send('Server is running successfully');
+    res.send('Server running successfully!');
 });
 
 // ================= SERVER =================

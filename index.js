@@ -34,7 +34,7 @@ const client = new MongoClient(uri, {
 let JWKS;
 try {
     JWKS = createRemoteJWKSet(
-        new URL('http://localhost:3000/api/auth/jwks')
+        new URL('https://appionment-client.vercel.app/api/auth/jwks')
     );
 } catch (err) {
     console.log("JWKS init failed");
@@ -47,6 +47,7 @@ const verifyToken = async (req, res, next) => {
     if (!authHeader) {
         return res.status(401).json({ message: "Unauthorized" });
     }
+    console.log("authHeader: ", authHeader)
 
     const token = authHeader.split(" ")[1];
 
@@ -56,6 +57,8 @@ const verifyToken = async (req, res, next) => {
 
     try {
         const { payload } = await jwtVerify(token, JWKS);
+        console.log("payload: ", payload)
+
         req.user = payload;
         next();
     } catch (error) {
@@ -63,6 +66,10 @@ const verifyToken = async (req, res, next) => {
         return res.status(401).json({ message: "Invalid token" });
     }
 };
+
+// token nto verifry hobe.....
+
+console.log("verifyToken initialized", verifyToken ? "successfully" : "failed");
 
 // ================= RUN =================
 async function run() {
@@ -94,6 +101,7 @@ async function run() {
 
 
         // ================= DOCTOR DETAILS =================
+
         app.get('/doclist/:id', verifyToken, async (req, res) => {
             const id = req.params.id;
             const result = await doctorsCollection.findOne({

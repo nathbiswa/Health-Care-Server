@@ -91,7 +91,7 @@ async function run() {
 
 
         // ================= DOCTOR DETAILS =================
-        app.get('/doclist/:id', async (req, res) => {
+        app.get('/doclist/:id', verifyToken, async (req, res) => {
             const id = req.params.id;
             const result = await doctorsCollection.findOne({
                 _id: new ObjectId(id)

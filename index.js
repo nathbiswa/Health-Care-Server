@@ -84,10 +84,13 @@ async function run() {
 
         // =================== TOP RATED DOCTORS =================
         app.get('/toprated', async (req, res) => {
-            const cursor = doctorsCollection.find().limit(3);
-            const result = await cursor.toArray();
+            const result = await doctorsCollection
+                .find()
+                .sort({ rating: -1 })
+                .limit(3)
+                .toArray();
             res.send(result);
-        })
+        });
 
 
         // ================= DOCTOR DETAILS =================

@@ -68,7 +68,7 @@ const verifyToken = async (req, res, next) => {
 async function run() {
     try {
         // await client.connect();
-        // console.log("MongoDB connected successfully!");
+        console.log("MongoDB connected successfully!");
 
         const db = client.db('healthcare');
 
@@ -82,7 +82,16 @@ async function run() {
             res.send(result);
         });
 
-        app.get('/doclist/:id', verifyToken, async (req, res) => {
+        // =================== TOP RATED DOCTORS =================
+        app.get('/toprated', async (req, res) => {
+            const cursor = doctorsCollection.find().limit(3);
+            const result = await cursor.toArray();
+            res.send(result);
+        })
+
+
+        // ================= DOCTOR DETAILS =================
+        app.get('/doclist/:id', async (req, res) => {
             const id = req.params.id;
             const result = await doctorsCollection.findOne({
                 _id: new ObjectId(id)
